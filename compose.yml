@@ -1,0 +1,18 @@
+---
+services:
+  cars:
+    container_name: cars
+    image: b0bbyb/cars:v1
+    build: .
+    ports:
+      - "1111:3000"
+    networks:
+      - network1
+    volumes:
+      - volume1:/myapp
+networks:
+  network1:
+    driver: bridge
+
+volumes:
+  volume1:
