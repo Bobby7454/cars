@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supercars</title>
+<style>
+  :root {
+    --paper: #ecebe6;
+    --card: #f7f6f2;
+    --ink: #1a1d21;
+    --steel: #6b727b;
+    --line: #cfcdc5;
+    --signal: #2437e8;
+    --font: Bahnschrift, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font); line-height: 1.4; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: clamp(56px, 13vw, 140px); line-height: .9; letter-spacing: -.04em; font-weight: 700; margin: 0 0 12px; }
+  .lead { color: var(--steel); margin: 0 0 32px; max-width: 46ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 14px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .controls label { color: var(--steel); font-size: 14px; margin-right: 8px; }
+  select, .sort button { font: inherit; font-size: 15px; color: var(--ink); background: var(--card); border: 1px solid var(--line); padding: 7px 12px; border-radius: 4px; cursor: pointer; }
+  .sort { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .sort button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  select:focus-visible, button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+  .count { margin-left: auto; color: var(--steel); font-size: 14px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  li { display: grid; grid-template-columns: 10px 1fr; background: var(--card); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .swatch { background: var(--c); }
+  .body { padding: 18px 20px; display: grid; gap: 16px; grid-template-columns: 1.2fr 2fr; align-items: center; }
+  h2 { margin: 0; font-size: 26px; letter-spacing: -.02em; line-height: 1.1; }
+  .meta { color: var(--steel); font-size: 14px; margin: 4px 0 0; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .stat dt { color: var(--steel); font-size: 13px; }
+  .stat dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat dd small { font-size: 13px; font-weight: 400; color: var(--steel); margin-left: 3px; }
+  .bar { height: 4px; background: var(--line); margin-top: 8px; border-radius: 2px; }
+  .bar span { display: block; height: 100%; background: var(--c); border-radius: 2px; }
+  .empty { padding: 40px 0; color: var(--steel); }
+  @media (max-width: 700px) { .body { grid-template-columns: 1fr; } .count { margin-left: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Supercars</h1>
+  <p class="lead">Ten of the fastest road cars ever built, ranked by whatever you care about most.</p>
+
+  <div class="controls">
+    <div><label for="make">Brand</label><select id="make"></select></div>
+    <div class="sort" role="group" aria-label="Sort by">
+      <label>Sort by</label>
+      <button data-sort="hp" aria-pressed="true">Power</button>
+      <button data-sort="accel" aria-pressed="false">0–100 km/h</button>
+      <button data-sort="top" aria-pressed="false">Top speed</button>
+    </div>
+    <div class="count" id="count" aria-live="polite"></div>
+  </div>
+
+  <ul id="list"></ul>
+</main>
+
+<script>
+  const state = { cars: [], make: 'All', sort: 'hp' };
+  const list = document.getElementById('list');
+  const makeSel = document.getElementById('make');
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function stat(label, value, unit, bar) {
+    const d = el('div', 'stat');
+    d.append(el('dt', '', label));
+    const dd = el('dd', '', value);
+    dd.append(el('small', '', unit));
+    d.append(dd);
+    if (bar !== undefined) {
+      const b = el('div', 'bar');
+      const s = el('span');
+      s.style.width = bar + '%';
+      b.append(s);
+      d.append(b);
+    }
+    return d;
+  }
+
+  function render() {
+    const maxTop = Math.max(...state.cars.map(c => c.top));
+    const rows = state.cars
+      .filter(c => state.make === 'All' || c.make === state.make)
+      .sort((a, b) => state.sort === 'accel' ? a.accel - b.accel : b[state.sort] - a[state.sort]);
+
+    list.replaceChildren();
+    document.getElementById('count').textContent = rows.length + (rows.length === 1 ? ' car' : ' cars');
+    if (!rows.length) { list.append(el('li', 'empty', 'No cars match this brand.')); return; }
+
+    for (const c of rows) {
+      const li = el('li');
+      li.style.setProperty('--c', c.color);
+      li.append(el('div', 'swatch'));
+      const body = el('div', 'body');
+      const head = el('div');
+      head.append(el('h2', '', c.make + ' ' + c.model));
+      head.append(el('p', 'meta', c.year + ', ' + c.engine));
+      const stats = el('dl', 'stats');
+      stats.style.margin = 0;
+      stats.append(
+        stat('Power', c.hp.toLocaleString(), 'hp'),
+        stat('0–100 km/h', c.accel.toFixed(2).replace(/0$/, ''), 's'),
+        stat('Top speed', c.top, 'km/h', Math.round(c.top / maxTop * 100))
+      );
+      body.append(head, stats);
+      li.append(body);
+      list.append(li);
+    }
+  }
+
+  document.querySelectorAll('.sort button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.sort = btn.dataset.sort;
+      document.querySelectorAll('.sort button').forEach(b => b.setAttribute('aria-pressed', b === btn));
+      render();
+    });
+  });
+
+  makeSel.addEventListener('change', () => { state.make = makeSel.value; render(); });
+
+  fetch('/api/cars')
+    .then(r => r.json())
+    .then(cars => {
+      state.cars = cars;
+      ['All', ...new Set(cars.map(c => c.make).sort())].forEach(m => makeSel.append(new Option(m === 'All' ? 'All brands' : m, m)));
+      render();
+    })
+    .catch(() => { list.replaceChildren(el('li', 'empty', 'Could not load cars. Refresh the page to try again.')); });
+</script>
+</body>
+</html>
