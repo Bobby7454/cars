@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Car details | AutoYard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/">AutoYard</a>
+      <nav><a href="/admin.html">Dealer login</a></nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <a class="back" href="/">Back to all cars</a>
+    <div id="view"></div>
+  </main>
+
+  <footer><div class="wrap">AutoYard. Prices are negotiable on inspection.</div></footer>
+
+  <script src="/common.js"></script>
+  <script>
+    const id = new URLSearchParams(location.search).get('id');
+    const view = document.getElementById('view');
+
+    fetch('/api/cars/' + encodeURIComponent(id))
+      .then((r) => { if (!r.ok) throw 0; return r.json(); })
+      .then((c) => {
+        document.title = `${c.year} ${c.make} ${c.model} | AutoYard`;
+        view.innerHTML = `
+          <div class="detail">
+            <div>
+              <div class="photo">${carImage(c)}</div>
+              <div class="panel"><h2>About this car</h2><p>${esc(c.description) || 'No description added.'}</p></div>
+            </div>
+            <div>
+              <h1>${esc(c.year)} ${esc(c.make)} ${esc(c.model)}</h1>
+              <div class="price">${inr(c.price)}${c.sold ? ' (Sold)' : ''}</div>
+              <table class="specs">
+                <tr><th>Year</th><td>${esc(c.year)}</td></tr>
+                <tr><th>Driven</th><td>${km(c.km)}</td></tr>
+                <tr><th>Fuel</th><td>${esc(c.fuel)}</td></tr>
+                <tr><th>Transmission</th><td>${esc(c.transmission)}</td></tr>
+                <tr><th>Colour</th><td>${esc(c.color) || '-'}</td></tr>
+              </table>
+              ${c.sold ? '<div class="panel">This car has been sold. <a href="/">Browse other cars</a>.</div>' : `
+              <form class="panel" id="inq">
+                <h2>Ask about this car</h2>
+                <label>Your name<input name="name" required maxlength="80" autocomplete="name"></label>
+                <label>Phone number<input name="phone" type="tel" required maxlength="20" autocomplete="tel"></label>
+                <label>Message (optional)<textarea name="message" maxlength="600" placeholder="Ask for a test drive or a price discussion"></textarea></label>
+                <button class="btn" type="submit">Send inquiry</button>
+                <div class="msg" id="msg" role="status"></div>
+              </form>`}
+            </div>
+          </div>`;
+
+        const form = document.getElementById('inq');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const msg = document.getElementById('msg');
+          const body = Object.fromEntries(new FormData(form));
+          body.carId = c.id;
+          const res = await fetch('/api/inquiries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const out = await res.json();
+          msg.className = 'msg ' + (res.ok ? 'ok' : 'err');
+          msg.textContent = res.ok ? 'Inquiry sent. We will call you soon.' : out.error;
+          if (res.ok) form.reset();
+        });
+      })
+      .catch(() => { view.innerHTML = '<div class="panel">This car is not listed. <a href="/">Browse all cars</a>.</div>'; });
+  </script>
+</body>
+</html>

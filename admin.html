@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dealer panel | AutoYard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/">AutoYard</a>
+      <nav><a href="/">View site</a><a href="#" id="logout" hidden>Log out</a></nav>
+    </div>
+  </header>
+
+  <main class="wrap admin">
+    <section id="login" style="max-width:360px">
+      <h1>Dealer login</h1>
+      <form class="panel" id="loginForm">
+        <label>Password<input type="password" id="pw" required autocomplete="current-password"></label>
+        <button class="btn" type="submit">Log in</button>
+        <div class="msg err" id="loginErr" role="alert"></div>
+      </form>
+    </section>
+
+    <section id="panel" hidden>
+      <h1>Dealer panel</h1>
+
+      <form class="panel" id="addForm">
+        <h2>Add a car</h2>
+        <div class="form-grid">
+          <label>Make<input name="make" required></label>
+          <label>Model<input name="model" required></label>
+          <label>Year<input name="year" type="number" required min="1980"></label>
+          <label>Price (₹)<input name="price" type="number" required min="1"></label>
+          <label>Kilometres driven<input name="km" type="number" required min="0"></label>
+          <label>Colour<input name="color"></label>
+          <label>Fuel
+            <select name="fuel"><option>Petrol</option><option>Diesel</option><option>CNG</option><option>Electric</option><option>Hybrid</option></select>
+          </label>
+          <label>Transmission
+            <select name="transmission"><option>Manual</option><option>Automatic</option></select>
+          </label>
+          <label>Image URL (optional)<input name="image" placeholder="https://..."></label>
+          <label class="wide">Description<textarea name="description" maxlength="600"></textarea></label>
+        </div>
+        <button class="btn" type="submit">Add car</button>
+        <div class="msg" id="addMsg" role="status"></div>
+      </form>
+
+      <div class="panel"><h2>Listings</h2><div class="rows" id="cars"></div></div>
+      <div class="panel"><h2>Inquiries</h2><div id="inqs"></div></div>
+    </section>
+  </main>
+
+  <script src="/common.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let token = sessionStorage.getItem('token') || '';
+    let carNames = {};
+
+    const api = async (url, opts = {}) => {
+      const res = await fetch(url, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
+      });
+      if (res.status === 401) { logout(); throw new Error('Login required'); }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      return data;
+    };
+
+    function logout() {
+      token = ''; sessionStorage.removeItem('token');
+      $('panel').hidden = true; $('login').hidden = false; $('logout').hidden = true;
+    }
+
+    async function loadAll() {
+      const [cars, inqs] = await Promise.all([fetch('/api/cars').then((r) => r.json()), api('/api/admin/inquiries')]);
+      carNames = Object.fromEntries(cars.map((c) => [c.id, `${c.year} ${c.make} ${c.model}`]));
+
+      $('cars').innerHTML = cars.length ? cars.map((c) => `
+        <div class="row">
+          <div class="grow"><strong>${esc(c.year)} ${esc(c.make)} ${esc(c.model)}</strong>
+            <small>${inr(c.price)}, ${km(c.km)}${c.sold ? ', sold' : ''}</small></div>
+          <button class="btn ghost" data-sold="${esc(c.id)}" data-val="${!c.sold}">${c.sold ? 'Mark available' : 'Mark sold'}</button>
+          <button class="btn ghost danger" data-del="${esc(c.id)}">Delete</button>
+        </div>`).join('') : '<p>No cars listed yet.</p>';
+
+      $('inqs').innerHTML = inqs.length ? inqs.map((i) => `
+        <div class="inq">
+          <strong>${esc(i.name)}</strong>, <a href="tel:${esc(i.phone)}">${esc(i.phone)}</a>
+          <small>about ${esc(carNames[i.carId] || 'a removed car')}, ${new Date(i.createdAt).toLocaleString()}</small>
+          ${i.message ? `<div>${esc(i.message)}</div>` : ''}
+        </div>`).join('') : '<p>No inquiries yet.</p>';
+    }
+
+    function show() {
+      $('login').hidden = true; $('panel').hidden = false; $('logout').hidden = false;
+      loadAll().catch(() => {});
+    }
+
+    $('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        token = data.token; sessionStorage.setItem('token', token); $('pw').value = ''; $('loginErr').textContent = '';
+        show();
+      } catch (err) { $('loginErr').textContent = err.message; }
+    });
+
+    $('logout').addEventListener('click', (e) => { e.preventDefault(); logout(); });
+
+    $('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = $('addMsg');
+      try {
+        await api('/api/cars', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(e.target))) });
+        e.target.reset(); msg.className = 'msg ok'; msg.textContent = 'Car added.';
+        loadAll();
+      } catch (err) { msg.className = 'msg err'; msg.textContent = err.message; }
+    });
+
+    $('cars').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      try {
+        if (b.dataset.sold) await api('/api/cars/' + b.dataset.sold, { method: 'PATCH', body: JSON.stringify({ sold: b.dataset.val === 'true' }) });
+        else if (b.dataset.del && confirm('Delete this car?')) await api('/api/cars/' + b.dataset.del, { method: 'DELETE' });
+        loadAll();
+      } catch (err) { alert(err.message); }
+    });
+
+    if (token) show();
+  </script>
+</body>
+</html>
